@@ -1,3 +1,5 @@
 fastapi
 uvicorn
-fpdf2
+pydantic
+fpdf
+

@@ -1,11 +1,17 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from math import pow
+import os
 
-app = FastAPI()
+from backend.agents.master_agent import master_agent
+from backend.agents.verification_agent import verify_pan
+from backend.agents.underwriting_agent import underwrite
+from backend.agents.sanction_agent import generate_sanction
 
-# CORS (VERY IMPORTANT)
+app = FastAPI(title="EY Agentic Loan AI")
+
+# -------------------- CORS --------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -14,62 +20,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Request model
+# -------------------- DIRECTORIES --------------------
+os.makedirs("backend/sanctions", exist_ok=True)
+os.makedirs("backend/uploads", exist_ok=True)
+
+# Serve sanction letters
+app.mount(
+    "/sanctions",
+    StaticFiles(directory="backend/sanctions"),
+    name="sanctions"
+)
+
+# -------------------- MODELS --------------------
 class LoanRequest(BaseModel):
     name: str
-    loan_amount: float
-    tenure_months: int
-    monthly_salary: float
-    credit_score: int
     pan: str
+    loan_amount: int
+    tenure_months: int
+    monthly_salary: int
+    credit_score: int
+    salary_slip_uploaded: bool = False
 
-# Response model
-class LoanResponse(BaseModel):
-    status: str
-    reason: str
-    emi: float
 
-@app.post("/evaluate-loan", response_model=LoanResponse)
+# -------------------- SALARY SLIP UPLOAD --------------------
+@app.post("/upload-salary-slip")
+async def upload_salary_slip(file: UploadFile = File(...)):
+    file_path = os.path.join("backend/uploads", file.filename)
+
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
+
+    return {
+        "status": "Uploaded",
+        "filename": file.filename
+    }
+
+
+# -------------------- MAIN LOAN FLOW --------------------
+@app.post("/evaluate-loan")
+@app.post("/evaluate-loan")
 def evaluate_loan(data: LoanRequest):
 
-    # Simple PAN validation
-    if len(data.pan) != 10:
-        return LoanResponse(
-            status="Rejected",
-            reason="Invalid PAN number",
-            emi=0
-        )
+    # 1️⃣ MASTER AGENT
+    sales_context = master_agent({
+        "intent": "personal_loan",
+        "amount": data.loan_amount,
+        "tenure": data.tenure_months,
+        "customer_type": "existing"
+    })
 
-    # Credit score rule
-    if data.credit_score < 650:
-        return LoanResponse(
-            status="Rejected",
-            reason="Low credit score",
-            emi=0
-        )
+    # 2️⃣ PAN VERIFICATION
+    if not verify_pan(data.pan):
+        return {
+            "status": "Rejected",
+            "reason": "PAN verification failed"
+        }
 
-    # EMI calculation
-    annual_rate = 10
-    r = annual_rate / (12 * 100)
-    n = data.tenure_months
-
-    emi = (
-        data.loan_amount
-        * r
-        * pow(1 + r, n)
-        / (pow(1 + r, n) - 1)
+    # 3️⃣ UNDERWRITING
+    decision = underwrite(
+        loan_amount=data.loan_amount,
+        salary=data.monthly_salary,
+        credit_score=data.credit_score,
+        salary_slip_uploaded=data.salary_slip_uploaded
     )
 
-    # Salary check
-    if emi > data.monthly_salary * 0.4:
-        return LoanResponse(
-            status="Rejected",
-            reason="EMI exceeds 40% of salary",
-            emi=round(emi, 2),
-        )
+    # ⏸ Salary slip required
+    if decision["status"] == "Pending":
+        return decision
 
-    return LoanResponse(
-        status="Approved",
-        reason="Loan approved successfully",
-        emi=round(emi, 2),
-    )
+    # ❌ Rejected
+    if decision["status"] == "Rejected":
+        return decision
+
+    # ✅ Approved → Generate sanction letter
+    filename = generate_sanction(data.name, data.loan_amount)
+
+    return {
+        "status": "Approved",
+        "emi": decision["emi"],
+        "message": sales_context,
+        "sanction_letter": f"sanctions/{filename}"
+    }

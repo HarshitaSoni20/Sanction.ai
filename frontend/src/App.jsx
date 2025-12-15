@@ -1,14 +1,20 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 function App() {
+  const chatEndRef = useRef(null);
+
   const [messages, setMessages] = useState([
-    { sender: "bot", text: "Hello! I can help you with a Job Loan." },
-    { sender: "bot", text: "What is your name?" },
+    { sender: "bot", text: "👋 Hi! I’m your personal loan assistant." },
+    { sender: "bot", text: "May I know your name?" },
   ]);
 
   const [step, setStep] = useState(0);
   const [input, setInput] = useState("");
-  const [approved, setApproved] = useState(false);
+  const [completed, setCompleted] = useState(false);
+
+  const [showUpload, setShowUpload] = useState(false);
+  const [salarySlipUploaded, setSalarySlipUploaded] = useState(false);
+  const [sanctionFile, setSanctionFile] = useState(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -20,20 +26,42 @@ function App() {
   });
 
   const questions = [
-    "What is your name?",
-    "Required loan amount?",
-    "Loan tenure (months)?",
-    "Your monthly salary?",
-    "Your credit score?",
-    "Enter your PAN number?",
+    "May I know your name?",
+    "How much loan amount do you need?",
+    "For how many months do you want the loan?",
+    "What is your monthly salary?",
+    "What is your credit score?",
+    "Please enter your PAN number",
   ];
 
-  const isValidPAN = (pan) => {
-    return /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan);
+  const isValidPAN = (pan) =>
+    /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // 🔁 Common backend call
+  const callEvaluateLoan = async (extra = {}) => {
+    const res = await fetch("http://127.0.0.1:8000/evaluate-loan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...form,
+        loan_amount: Number(form.loan_amount),
+        tenure_months: Number(form.tenure_months),
+        monthly_salary: Number(form.monthly_salary),
+        credit_score: Number(form.credit_score),
+        salary_slip_uploaded: salarySlipUploaded,
+        ...extra,
+      }),
+    });
+    return res.json();
   };
 
+  // ---------------- SEND MESSAGE ----------------
   const handleSend = async () => {
-    if (!input) return;
+    if (!input.trim() || completed || showUpload) return;
 
     setMessages((prev) => [...prev, { sender: "user", text: input }]);
 
@@ -50,7 +78,7 @@ function App() {
       if (!isValidPAN(pan)) {
         setMessages((prev) => [
           ...prev,
-          { sender: "bot", text: "Invalid PAN format. Example: ABCDE1234F" },
+          { sender: "bot", text: "❌ Invalid PAN format (ABCDE1234F)" },
         ]);
         setInput("");
         return;
@@ -61,41 +89,36 @@ function App() {
     setForm(updated);
     setInput("");
 
-    // FINAL STEP → BACKEND CALL
+    // FINAL API CALL
     if (step === 5) {
       setMessages((prev) => [
         ...prev,
-        { sender: "bot", text: "Checking your loan eligibility..." },
+        { sender: "bot", text: "🔍 Verifying details and checking eligibility..." },
       ]);
 
-      try {
-        const res = await fetch("http://127.0.0.1:8000/evaluate-loan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: updated.name,
-            loan_amount: Number(updated.loan_amount),
-            tenure_months: Number(updated.tenure_months),
-            monthly_salary: Number(updated.monthly_salary),
-            credit_score: Number(updated.credit_score),
-            pan: updated.pan,
-          }),
-        });
+      const data = await callEvaluateLoan({ ...updated });
 
-        const data = await res.json();
-
-        if (data.status === "Approved") setApproved(true);
+      if (data.status === "Approved") {
+        setCompleted(true);
+        setSanctionFile(data.sanction_letter);
 
         setMessages((prev) => [
           ...prev,
-          { sender: "bot", text: `Status: ${data.status}` },
-          { sender: "bot", text: `Reason: ${data.reason}` },
-          { sender: "bot", text: `Monthly EMI: ₹${data.emi}` },
+          { sender: "bot", text: `🎉 Congratulations ${updated.name}!` },
+          { sender: "bot", text: `💰 EMI: ₹${data.emi}/month` },
+          { sender: "bot", text: data.message },
         ]);
-      } catch {
+      } else if (data.reason === "Salary slip required") {
+        setShowUpload(true);
         setMessages((prev) => [
           ...prev,
-          { sender: "bot", text: "Server error. Please try again." },
+          { sender: "bot", text: "📄 Salary slip required. Please upload below." },
+        ]);
+      } else {
+        setCompleted(true);
+        setMessages((prev) => [
+          ...prev,
+          { sender: "bot", text: `❌ Rejected: ${data.reason}` },
         ]);
       }
       return;
@@ -108,60 +131,121 @@ function App() {
     setStep(step + 1);
   };
 
-  return (
-    <div style={{ maxWidth: 500, margin: "40px auto", fontFamily: "Arial" }}>
-      <h2>EY Job Loan Chatbot</h2>
+  // ---------------- FILE UPLOAD ----------------
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
 
-      <div
-        style={{
-          border: "1px solid #ccc",
-          padding: 10,
-          height: 320,
-          overflowY: "auto",
-        }}
-      >
+    const formData = new FormData();
+    formData.append("file", file);
+
+    await fetch("http://127.0.0.1:8000/upload-salary-slip", {
+      method: "POST",
+      body: formData,
+    });
+
+    setSalarySlipUploaded(true);
+    setShowUpload(false);
+
+    setMessages((prev) => [
+      ...prev,
+      { sender: "bot", text: "✅ Salary slip uploaded successfully." },
+      { sender: "bot", text: "🔁 Rechecking your eligibility..." },
+    ]);
+
+    // 🔥 SECOND BACKEND CALL
+    const data = await callEvaluateLoan({ salary_slip_uploaded: true });
+
+    if (data.status === "Approved") {
+      setCompleted(true);
+      setSanctionFile(data.sanction_letter);
+
+      setMessages((prev) => [
+        ...prev,
+        { sender: "bot", text: "🎉 Loan Approved!" },
+        { sender: "bot", text: `💰 EMI: ₹${data.emi}/month` },
+        { sender: "bot", text: data.message },
+      ]);
+    } else {
+      setCompleted(true);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "bot", text: `❌ ${data.reason}` },
+      ]);
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: 520, margin: "40px auto", fontFamily: "Arial" }}>
+      <h2>EY Agentic Loan Assistant</h2>
+
+      <div style={{ border: "1px solid #ccc", padding: 12, height: 380, overflowY: "auto" }}>
         {messages.map((m, i) => (
-          <div
-            key={i}
-            style={{ textAlign: m.sender === "bot" ? "left" : "right" }}
-          >
-            <p>
-              <b>{m.sender === "bot" ? "Bot" : "You"}:</b> {m.text}
-            </p>
+          <div key={i} style={{ textAlign: m.sender === "bot" ? "left" : "right" }}>
+            <span
+              style={{
+                padding: "8px 12px",
+                borderRadius: 12,
+                background: m.sender === "bot" ? "#e0e0e0" : "#4caf50",
+                color: m.sender === "bot" ? "#000" : "#fff",
+                display: "inline-block",
+                marginBottom: 6,
+              }}
+            >
+              {m.text}
+            </span>
           </div>
         ))}
 
-        {approved && (
+        {showUpload && (
+          <div style={{ marginTop: 10 }}>
+            <input type="file" onChange={handleFileUpload} />
+          </div>
+        )}
+
+        {sanctionFile && (
           <div style={{ textAlign: "center", marginTop: 15 }}>
             <a
-              href="http://127.0.0.1:8000/download-sanction"
+              href={`http://127.0.0.1:8000/${sanctionFile}`}
               target="_blank"
               rel="noreferrer"
               style={{
-                padding: "8px 12px",
-                background: "#4caf50",
+                padding: "10px 14px",
+                background: "#1976d2",
                 color: "white",
-                textDecoration: "none",
-                borderRadius: 4,
+                borderRadius: 6,
                 fontWeight: "bold",
+                textDecoration: "none",
               }}
             >
-              Download Sanction Letter
+              📄 Download Sanction Letter
             </a>
           </div>
         )}
+
+        <div ref={chatEndRef} />
       </div>
 
       <input
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        placeholder="Type here..."
-        style={{ width: "100%", padding: 8, marginTop: 10 }}
+        placeholder="Type your answer..."
+        disabled={completed || showUpload}
+        style={{ width: "100%", padding: 10, marginTop: 10 }}
       />
 
       <button
         onClick={handleSend}
-        style={{ width: "100%", marginTop: 5 }}
+        disabled={completed || showUpload}
+        style={{
+          width: "100%",
+          marginTop: 6,
+          padding: 10,
+          background: "#1976d2",
+          color: "white",
+          border: "none",
+          borderRadius: 4,
+        }}
       >
         Send
       </button>

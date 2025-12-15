@@ -19,3 +19,7 @@ frontend/node_modules/
 .vscode/
 .idea/
 .DS_Store
+
+backend/uploads/
+*.pdf
+
