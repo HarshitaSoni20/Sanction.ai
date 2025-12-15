@@ -3,3 +3,4 @@ uvicorn
 pydantic
 fpdf
 
+pip freeze > backend/requirements.txt
