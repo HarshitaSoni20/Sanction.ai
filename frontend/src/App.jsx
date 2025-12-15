@@ -96,7 +96,8 @@ function App() {
 
   const callEvaluateLoan = async (extra = {}) => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/evaluate-loan", {
+      // CHANGE #1: Use relative path for Vercel
+      const res = await fetch("/evaluate-loan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -174,7 +175,8 @@ function App() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      await fetch("http://127.0.0.1:8000/upload-salary-slip", { method: "POST", body: formData });
+      // CHANGE #2: Use relative path for Vercel
+      await fetch("/upload-salary-slip", { method: "POST", body: formData });
       setSalarySlipUploaded(true);
       setShowUpload(false);
       setMessages((prev) => [...prev, { sender: "bot", text: "✅ Uploaded." }, { sender: "bot", text: "🔁 Rechecking..." }]);
@@ -385,11 +387,11 @@ function App() {
                                 <div className="file-upload-box"><input type="file" onChange={handleFileUpload} /></div>
                             )}
 
-                            {/* --- FIX APPLIED HERE: Check for both success messages --- */}
+                            {/* --- CHECK BOTH SCENARIOS & CHANGE #3: Use relative path for Download --- */}
                             {(m.text.includes("Congratulations") || m.text.includes("Loan Approved")) && sanctionFile && (
                                 <div style={{marginTop: 10}}>
                                     <a 
-                                        href={`http://127.0.0.1:8000/${sanctionFile}`} 
+                                        href={`/${sanctionFile}`} 
                                         target="_blank" 
                                         rel="noreferrer" 
                                         className="download-btn"
