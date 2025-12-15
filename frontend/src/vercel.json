@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/evaluate-loan",
+      "destination": "/main.py"
+    },
+    {
+      "source": "/upload-salary-slip",
+      "destination": "/main.py"
+    },
+    {
+      "source": "/sanctions/(.*)",
+      "destination": "/main.py"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

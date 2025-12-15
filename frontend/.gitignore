@@ -38,3 +38,5 @@ frontend/node_modules/
 
 # Env
 .env
+backend/uploads/
+*.pdf
