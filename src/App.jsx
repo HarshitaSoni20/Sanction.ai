@@ -1,5 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 
+// ⚠️ STEP 1: REPLACE THIS WITH YOUR RENDER BACKEND URL
+// Example: "https://ey-loan-backend.onrender.com"
+const BACKEND_URL = "https://YOUR-RENDER-APP-NAME.onrender.com"; 
+
 // --- CUSTOM 3D SVG ROBOT COMPONENT ---
 const ThreeDRobot = ({ className, style }) => (
   <svg
@@ -96,8 +100,8 @@ function App() {
 
   const callEvaluateLoan = async (extra = {}) => {
     try {
-      // CHANGE #1: Use relative path for Vercel
-      const res = await fetch("/evaluate-loan", {
+      // ✅ FIX: Use the BACKEND_URL variable
+      const res = await fetch(`${BACKEND_URL}/evaluate-loan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,7 +117,7 @@ function App() {
       return res.json();
     } catch (e) {
       console.error("Backend error", e);
-      return { status: "Error", reason: "Could not connect to server." };
+      return { status: "Error", reason: "Could not connect to server. Check Render URL." };
     }
   };
 
@@ -145,8 +149,31 @@ function App() {
       
       if (data.status === "Approved") {
         setCompleted(true);
-        // Backend returns "sanctions/filename.pdf"
-        setSanctionFile(data.sanction_letter);
+        
+        // ✅ FIX: Handle Base64 PDF Conversion
+        if (data.sanction_letter_data) {
+            try {
+                // Convert Base64 string to Blob
+                const byteCharacters = atob(data.sanction_letter_data);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const pdfBlob = new Blob([byteArray], { type: "application/pdf" });
+                
+                // Create downloadable URL
+                const url = URL.createObjectURL(pdfBlob);
+                setSanctionFile(url);
+            } catch (err) {
+                console.error("PDF Conversion Error:", err);
+                setMessages(prev => [...prev, { sender: "bot", text: "⚠️ Error preparing download." }]);
+            }
+        } else {
+            // Fallback just in case
+            setSanctionFile(null);
+        }
+
         setMessages((prev) => [
           ...prev, 
           { sender: "bot", text: `🎉 Congratulations ${updated.name}!` },
@@ -175,8 +202,9 @@ function App() {
     const formData = new FormData();
     formData.append("file", file);
     try {
-      // CHANGE #2: Use relative path for Vercel
-      await fetch("/upload-salary-slip", { method: "POST", body: formData });
+      // ✅ FIX: Use BACKEND_URL for uploads too
+      await fetch(`${BACKEND_URL}/upload-salary-slip`, { method: "POST", body: formData });
+      
       setSalarySlipUploaded(true);
       setShowUpload(false);
       setMessages((prev) => [...prev, { sender: "bot", text: "✅ Uploaded." }, { sender: "bot", text: "🔁 Rechecking..." }]);
@@ -184,7 +212,24 @@ function App() {
       const data = await callEvaluateLoan({ salary_slip_uploaded: true });
       if (data.status === "Approved") {
         setCompleted(true);
-        setSanctionFile(data.sanction_letter);
+
+        // ✅ FIX: Handle Base64 PDF Conversion (Again for this path)
+        if (data.sanction_letter_data) {
+            try {
+                const byteCharacters = atob(data.sanction_letter_data);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const pdfBlob = new Blob([byteArray], { type: "application/pdf" });
+                const url = URL.createObjectURL(pdfBlob);
+                setSanctionFile(url);
+            } catch (err) {
+                console.error("PDF Error", err);
+            }
+        }
+
         setMessages((prev) => [
             ...prev, 
             { sender: "bot", text: "🎉 Loan Approved!" }, 
@@ -387,11 +432,12 @@ function App() {
                                 <div className="file-upload-box"><input type="file" onChange={handleFileUpload} /></div>
                             )}
 
-                            {/* --- CHECK BOTH SCENARIOS & CHANGE #3: Use relative path for Download --- */}
+                            {/* --- ✅ FIX: DOWNLOAD BUTTON LOGIC --- */}
                             {(m.text.includes("Congratulations") || m.text.includes("Loan Approved")) && sanctionFile && (
                                 <div style={{marginTop: 10}}>
                                     <a 
-                                        href={`/${sanctionFile}`} 
+                                        href={sanctionFile} 
+                                        download="Sanction_Letter.pdf"
                                         target="_blank" 
                                         rel="noreferrer" 
                                         className="download-btn"
