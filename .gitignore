@@ -1,6 +1,33 @@
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build
+dist/
+dist-ssr/
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
 # Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 venv/
 .venv/
 backend/venv/
@@ -9,17 +36,7 @@ backend/venv/
 node_modules/
 frontend/node_modules/
 
-# Logs
-*.log
-
 # Env
 .env
-
-# OS / Editor
-.vscode/
-.idea/
-.DS_Store
-
 backend/uploads/
 *.pdf
-
