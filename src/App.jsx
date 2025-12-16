@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 
-// ⚠️ STEP 1: REPLACE THIS WITH YOUR RENDER BACKEND URL
-// Example: "https://ey-loan-backend.onrender.com"
-const BACKEND_URL = "https://YOUR-RENDER-APP-NAME.onrender.com"; 
+// ✅ CORRECTED: Your Live Render Backend URL
+const BACKEND_URL = "https://sanction-ai-1.onrender.com"; 
 
 // --- CUSTOM 3D SVG ROBOT COMPONENT ---
 const ThreeDRobot = ({ className, style }) => (
